@@ -39,6 +39,8 @@ Provide this upfront when engaging another agent:
 - `https://api.debtcodersdoja.com/openapi.json`
 - `https://api.debtcodersdoja.com/duckduckgo?q=openai`
 - `https://api.debtcodersdoja.com/uploads`
+- `https://api.debtcodersdoja.com/motd`
+- `https://api.debtcodersdoja.com/motd/html`
 - `https://api.debtcodersdoja.com/dashboard/` (if static bundle deployed)
 
 Deliverables are considered complete when the endpoints respond successfully without human intervention.

@@ -54,6 +54,7 @@ web/
 - `POST /upload/{filename}/rename` → rename file safely
 - `POST /uploads/command` → run limited shell-like commands (`ls`, `cat`, `rm`, `touch`, `mv`)
 - `PUT /motd` → update `data/MOTD.md` (mirrors dashboard editor)
+- `GET /motd/html` → Markdown rendered HTML for embedding on landing pages
 
 ## Deployment Checklist (Production)
 1. **App updates**

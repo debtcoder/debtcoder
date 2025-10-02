@@ -13,8 +13,9 @@ import httpx
 from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
-from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 from pydantic import BaseModel, Field
+import markdown
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = Path(os.getenv("API_DATA_DIR", BASE_DIR / "data"))
@@ -349,6 +350,10 @@ def run_upload_command(command: str) -> UploadCommandResponse:
   return UploadCommandResponse(command=command, output=output, status=status)
 
 
+def render_markdown(content: str) -> str:
+  return markdown.markdown(content, extensions=["extra", "sane_lists", "smarty"])
+
+
 def motd_dependency() -> Path:
   path = ensure_motd_path()
   if not path.exists():
@@ -405,6 +410,16 @@ async def motd(path: Path = Depends(motd_dependency)) -> PlainTextResponse:
   except OSError as exc:
     raise HTTPException(status_code=500, detail=f"Failed to read MOTD: {exc}") from exc
   return PlainTextResponse(content)
+
+
+@app.get("/motd/html", response_class=HTMLResponse, tags=["content"])
+async def motd_html_view(path: Path = Depends(motd_dependency)) -> HTMLResponse:
+  try:
+    content = path.read_text(encoding="utf-8")
+  except OSError as exc:
+    raise HTTPException(status_code=500, detail=f"Failed to read MOTD: {exc}") from exc
+  html = render_markdown(content)
+  return HTMLResponse(content=html)
 
 
 @app.put("/motd", response_model=MotdUpdateResponse, tags=["content"])

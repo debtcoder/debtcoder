@@ -101,6 +101,31 @@
     .contact-links a:hover {
       background: rgba(11,13,23,0.08);
     }
+    .motd {
+      margin-top: 2.4rem;
+      padding: 1.6rem;
+      border-radius: 16px;
+      background: rgba(11,13,23,0.04);
+      border: 1px solid rgba(11,13,23,0.12);
+      text-align: left;
+    }
+    .motd h2 {
+      margin-top: 0;
+      font-size: 1.1rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    .motd-content {
+      margin-top: 1rem;
+      line-height: 1.7;
+    }
+    .motd-content pre,
+    .motd-content code {
+      font-family: 'Courier New', Courier, monospace;
+      background: rgba(11,13,23,0.05);
+      padding: 0.15rem 0.3rem;
+      border-radius: 6px;
+    }
   </style>
 </head>
 <body>
@@ -121,6 +146,26 @@
       <a href="mailto:debtcoder@gmail.com">debtcoder@gmail.com</a>
       <a href="https://github.com/debtcoder" target="_blank" rel="noopener">github.com/debtcoder</a>
     </div>
+    <section class="motd" aria-live="polite">
+      <h2>Dojo MOTD</h2>
+      <div id="motd-content" class="motd-content">Loading latest note…</div>
+    </section>
   </main>
+  <script>
+    const motdTarget = document.getElementById('motd-content');
+    const apiBase = 'https://api.debtcodersdoja.com';
+    async function loadMotd() {
+      try {
+        const response = await fetch(`${apiBase}/motd/html`);
+        if (!response.ok) throw new Error('MOTD fetch failed');
+        const html = await response.text();
+        motdTarget.innerHTML = html;
+      } catch (error) {
+        motdTarget.textContent = 'Unable to load MOTD right now.';
+        console.error(error);
+      }
+    }
+    loadMotd();
+  </script>
 </body>
 </html>
