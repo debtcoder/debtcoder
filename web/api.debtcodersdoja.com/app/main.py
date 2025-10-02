@@ -416,9 +416,18 @@ def render_markdown(content: str) -> str:
   return markdown.markdown(content, extensions=["extra", "sane_lists", "smarty"])
 
 
-def resolve_upload_path(raw_path: str) -> Path:
-  raw_path = raw_path.lstrip("/\\")
-  candidate = (UPLOAD_DIR / raw_path).resolve()
+def resolve_upload_path(raw_path: Optional[str]) -> Path:
+  if not raw_path or raw_path.strip() in {"", ".", "/"}:
+    relative = Path(".")
+  else:
+    cleaned = raw_path.strip()
+    if cleaned.startswith("/uploads/"):
+      cleaned = cleaned[len("/uploads/") :]
+    elif cleaned.startswith("uploads/"):
+      cleaned = cleaned[len("uploads/") :]
+    cleaned = cleaned.lstrip("/\\")
+    relative = Path(cleaned)
+  candidate = (UPLOAD_DIR / relative).resolve()
   try:
     candidate.relative_to(UPLOAD_DIR.resolve())
   except ValueError as exc:
@@ -592,9 +601,18 @@ async def upload_command(request: UploadCommandRequest) -> UploadCommandResponse
 async def fs_list(path: Optional[str] = Query(default=None, description="Subdirectory to list")) -> FSListResponse:
   target = resolve_upload_path(path or "")
   if not target.exists():
-    raise HTTPException(status_code=404, detail="Directory not found")
+    return FSListResponse(items=[])
+
+  # If a file path is provided, return metadata for that single file.
   if target.is_file():
-    raise HTTPException(status_code=400, detail="Path points to a file")
+    stat = target.stat()
+    item = FSListItem(
+      path=relative_from_uploads(target),
+      is_dir=False,
+      size_bytes=stat.st_size,
+      modified_at=datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc),
+    )
+    return FSListResponse(items=[item])
 
   items: List[FSListItem] = []
   for entry in sorted(target.iterdir(), key=lambda p: p.name.lower()):
