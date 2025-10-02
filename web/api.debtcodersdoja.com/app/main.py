@@ -61,6 +61,7 @@ PUBLIC_PATHS = {
   "/privacy",
   "/motd",
   "/motd/html",
+  "/duckduckgo",
   "/healthz",
   "/docs",
   "/openapi.json",
@@ -107,11 +108,13 @@ class DuckDuckGoResult(BaseModel):
   title: str | None = Field(default=None, description="Result title from DuckDuckGo")
   url: str | None = Field(default=None, description="Canonical URL for the result")
   summary: str | None = Field(default=None, description="Plain text summary snippet")
+  source: str | None = Field(default=None, description="Category or source DuckDuckGo associated with the result")
 
 
 class DuckDuckGoResponse(BaseModel):
   query: str
   abstract: str | None
+  heading: str | None
   answer: str | None
   results: List[DuckDuckGoResult]
   raw: Dict[str, Any] = Field(default_factory=dict, description="Raw DuckDuckGo payload (redacted keys removed)")
@@ -189,9 +192,17 @@ def sanitize_filename(filename: str) -> str:
 def duckduckgo_payload_filter(payload: Dict[str, Any]) -> Dict[str, Any]:
   allowed_keys = {
     "Abstract",
+    "AbstractText",
+    "AbstractSource",
+    "AbstractURL",
     "Answer",
+    "AnswerType",
+    "Heading",
     "RelatedTopics",
     "Results",
+    "Definition",
+    "DefinitionSource",
+    "DefinitionURL",
   }
   return {key: payload[key] for key in allowed_keys if key in payload}
 
@@ -242,39 +253,74 @@ async def fetch_duckduckgo(query: str) -> DuckDuckGoResponse:
     "no_redirect": "1",
     "no_html": "1",
   }
-  async with httpx.AsyncClient(timeout=10) as client:
+  async with httpx.AsyncClient(
+    timeout=10,
+    headers={
+      "User-Agent": "DebtCodersDoja/1.0 (+https://api.debtcodersdoja.com)",
+      "Accept": "application/json",
+    },
+  ) as client:
     response = await client.get(DUCKDUCKGO_ENDPOINT, params=params)
   try:
     response.raise_for_status()
   except httpx.HTTPStatusError as exc:
     raise HTTPException(status_code=exc.response.status_code, detail="DuckDuckGo query failed") from exc
-  payload = response.json()
+  try:
+    payload = response.json()
+  except ValueError as exc:
+    raise HTTPException(status_code=502, detail="DuckDuckGo returned invalid payload") from exc
   focus_keys = duckduckgo_payload_filter(payload)
 
   results: List[DuckDuckGoResult] = []
-  for item in payload.get("Results", []):
+
+  def append_result(text: Any, url: Any, summary: Any, source: Any) -> None:
+    if not text:
+      return
+    summary_text = summary if isinstance(summary, str) and summary else (text if isinstance(text, str) else None)
     results.append(
       DuckDuckGoResult(
-        title=item.get("Text"),
-        url=item.get("FirstURL"),
-        summary=item.get("Text"),
+        title=text if isinstance(text, str) else None,
+        url=url if isinstance(url, str) else None,
+        summary=summary_text,
+        source=source if isinstance(source, str) else None,
       )
     )
 
-  if not results and payload.get("RelatedTopics"):
-    for topic in payload["RelatedTopics"]:
-      if isinstance(topic, dict) and topic.get("Text"):
-        results.append(
-          DuckDuckGoResult(
-            title=topic.get("Text"),
-            url=topic.get("FirstURL"),
-            summary=topic.get("Text"),
-          )
-        )
+  for item in payload.get("Results") or []:
+    if not isinstance(item, dict):
+      continue
+    append_result(item.get("Text"), item.get("FirstURL"), item.get("Text"), item.get("Source"))
+
+  def extract_related(entries: Any, source: str | None = None) -> None:
+    if not isinstance(entries, list):
+      return
+    for entry in entries:
+      if not isinstance(entry, dict):
+        continue
+      if entry.get("Topics"):
+        extract_related(entry.get("Topics"), entry.get("Name") or source)
+        continue
+      append_result(entry.get("Text") or entry.get("Heading"), entry.get("FirstURL"), entry.get("Result"), source or entry.get("Icon", {}).get("URL"))
+
+  extract_related(payload.get("RelatedTopics"))
+
+  if not results:
+    definition = payload.get("Definition")
+    if isinstance(definition, str) and definition:
+      append_result(payload.get("Heading") or query, payload.get("DefinitionURL"), definition, payload.get("DefinitionSource"))
+
+  if not results:
+    abstract_text = payload.get("AbstractText") or payload.get("Abstract")
+    if isinstance(abstract_text, str) and abstract_text:
+      append_result(payload.get("Heading") or query, payload.get("AbstractURL"), abstract_text, payload.get("AbstractSource"))
+
+  if not results:
+    append_result(payload.get("Heading") or query, None, None, None)
 
   return DuckDuckGoResponse(
     query=query,
-    abstract=payload.get("Abstract"),
+    abstract=payload.get("AbstractText") or payload.get("Abstract"),
+    heading=payload.get("Heading"),
     answer=payload.get("Answer"),
     results=results,
     raw=focus_keys,
