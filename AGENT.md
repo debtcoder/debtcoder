@@ -46,6 +46,8 @@ web/
 - Repo handoff docs: `AI_AGENT_HANDOFF.md`, `AGENT.md`, `AGENTS.md`
 - Git workspace for GitHub sync: `/home/debtcoder/debtcoder_repo`
 - Dashboard source: `/home/debtcoder/debtcoder_repo/dashboard` (Vite build → `dist/`)
+- Current API version: `0.2.0` (`API_VERSION` in `/etc/api-debtcodersdoja.env`)
+- Dashboard expects `VITE_API_BASE` and `VITE_API_KEY` (copy `dashboard/.env.example`, key must match `API_ACCESS_KEY`)
 
 ## API Surface Highlights
 - `GET /uploads` → list uploads with size + modified stamps

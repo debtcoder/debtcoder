@@ -48,6 +48,10 @@ npm run build
 
 Ship the compiled `dist/` via NGINX (e.g., `/var/www/api.debtcodersdoja.com/dashboard`) or any static host.
 
+Copy `.env.example` to `.env` and set:
+- `VITE_API_BASE` (optional override)
+- `VITE_API_KEY` (must match `API_ACCESS_KEY` on the API server)
+
 ### API quick hits
 - Send `X-Doja-Key: <secret>` on every request (value lives in `/etc/api-debtcodersdoja.env`).
 - `/fs/list` – list files/directories under uploads (optional `path` query)

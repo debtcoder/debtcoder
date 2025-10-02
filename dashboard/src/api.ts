@@ -37,6 +37,18 @@ export type FSListItem = {
 };
 
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? 'https://api.debtcodersdoja.com';
+const API_KEY = import.meta.env.VITE_API_KEY as string | undefined;
+
+function withHeaders(extra?: HeadersInit): HeadersInit {
+  if (!API_KEY) {
+    return extra ?? {};
+  }
+  const merged = new Headers(extra ?? {});
+  if (!merged.has('X-Doja-Key')) {
+    merged.set('X-Doja-Key', API_KEY);
+  }
+  return merged;
+}
 
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
@@ -51,13 +63,17 @@ async function handleResponse<T>(response: Response): Promise<T> {
 }
 
 export async function fetchUploads(): Promise<UploadItem[]> {
-  const response = await fetch(`${API_BASE}/uploads`);
+  const response = await fetch(`${API_BASE}/uploads`, {
+    headers: withHeaders(),
+  });
   const payload = await handleResponse<{ files: UploadItem[] }>(response);
   return payload.files;
 }
 
 export async function fetchUploadText(filename: string): Promise<string> {
-  const response = await fetch(`${API_BASE}/upload/${encodeURIComponent(filename)}/text`);
+  const response = await fetch(`${API_BASE}/upload/${encodeURIComponent(filename)}/text`, {
+    headers: withHeaders(),
+  });
   const payload = await handleResponse<{ content: string }>(response);
   return payload.content;
 }
@@ -65,7 +81,7 @@ export async function fetchUploadText(filename: string): Promise<string> {
 export async function saveUploadText(filename: string, content: string): Promise<UploadSummary> {
   const response = await fetch(`${API_BASE}/upload/${encodeURIComponent(filename)}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: withHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ content }),
   });
   return handleResponse<UploadSummary>(response);
@@ -74,6 +90,7 @@ export async function saveUploadText(filename: string, content: string): Promise
 export async function deleteUpload(filename: string): Promise<UploadSummary> {
   const response = await fetch(`${API_BASE}/upload/${encodeURIComponent(filename)}`, {
     method: 'DELETE',
+    headers: withHeaders(),
   });
   return handleResponse<UploadSummary>(response);
 }
@@ -81,7 +98,7 @@ export async function deleteUpload(filename: string): Promise<UploadSummary> {
 export async function renameUpload(filename: string, target: string): Promise<UploadSummary> {
   const response = await fetch(`${API_BASE}/upload/${encodeURIComponent(filename)}/rename`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: withHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ target }),
   });
   return handleResponse<UploadSummary>(response);
@@ -90,7 +107,7 @@ export async function renameUpload(filename: string, target: string): Promise<Up
 export async function runUploadCommand(command: string): Promise<UploadCommandResponse> {
   const response = await fetch(`${API_BASE}/uploads/command`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: withHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ command }),
   });
   return handleResponse<UploadCommandResponse>(response);
@@ -104,33 +121,40 @@ export async function uploadFiles(files: FileList | File[]): Promise<UploadSumma
   const response = await fetch(`${API_BASE}/upload`, {
     method: 'POST',
     body: payload,
+    headers: withHeaders(),
   });
   return handleResponse<UploadSummary[]>(response);
 }
 
 export async function fetchMotd(): Promise<string> {
-  const response = await fetch(`${API_BASE}/motd`);
+  const response = await fetch(`${API_BASE}/motd`, {
+    headers: withHeaders(),
+  });
   return handleResponse<string>(response);
 }
 
 export async function updateMotd(content: string) {
   const response = await fetch(`${API_BASE}/motd`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: withHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ content }),
   });
   return handleResponse<{ message: string; bytes_written: number; updated_at: string }>(response);
 }
 
 export async function fetchDiagnostics(): Promise<Diagnostics> {
-  const response = await fetch(`${API_BASE}/diagnostics`);
+  const response = await fetch(`${API_BASE}/diagnostics`, {
+    headers: withHeaders(),
+  });
   return handleResponse<Diagnostics>(response);
 }
 
 export async function fetchFSList(path?: string): Promise<FSListItem[]> {
   const url = new URL(`${API_BASE}/fs/list`);
   if (path) url.searchParams.set('path', path);
-  const response = await fetch(url.toString());
+  const response = await fetch(url.toString(), {
+    headers: withHeaders(),
+  });
   const payload = await handleResponse<{ items: FSListItem[] }>(response);
   return payload.items;
 }
@@ -138,7 +162,9 @@ export async function fetchFSList(path?: string): Promise<FSListItem[]> {
 export async function fetchFileText(path: string): Promise<string> {
   const url = new URL(`${API_BASE}/fs/read`);
   url.searchParams.set('path', path);
-  const response = await fetch(url.toString());
+  const response = await fetch(url.toString(), {
+    headers: withHeaders(),
+  });
   const payload = await handleResponse<TextFilePayload>(response);
   return payload.content;
 }

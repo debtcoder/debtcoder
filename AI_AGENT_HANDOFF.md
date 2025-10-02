@@ -46,5 +46,6 @@ Provide this upfront when engaging another agent:
 
 > All API requests must include `X-Doja-Key: <secret>` (see `/etc/api-debtcodersdoja.env`).
 > Swagger `/docs` exposes the same requirement via the Authorize button (API Key in header).
+> Dashboard builds read that key via `VITE_API_KEY` (`dashboard/.env.example`).
 
 Deliverables are considered complete when the endpoints respond successfully without human intervention.
