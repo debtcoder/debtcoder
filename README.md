@@ -54,6 +54,7 @@ Ship the compiled `dist/` via NGINX (e.g., `/var/www/api.debtcodersdoja.com/dash
 - `/fs/read` – stream UTF-8 file content from uploads
 - `/fs/write` – write/update text files (auto-creates folders)
 - `/fs/delete` – remove files inside uploads
+- Swagger `/docs` exposes the same key via “Authorize” (API key in header).
 - Legacy multipart upload still lives at `/upload`
 
 ## Hit me up

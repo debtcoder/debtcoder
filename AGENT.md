@@ -60,6 +60,7 @@ web/
 - `POST /fs/write` → write text payloads, auto-creating directories
 - `DELETE /fs/delete` → remove files inside uploads root
 - All JSON endpoints require header `X-Doja-Key` matching `API_ACCESS_KEY` from `/etc/api-debtcodersdoja.env` (dashboard handles this automatically).
+- OpenAPI advertises the header via `apiKey` security scheme; use the Authorize button in Swagger `/docs` with that same key.
 
 ## Deployment Checklist (Production)
 1. **App updates**

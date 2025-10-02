@@ -217,6 +217,17 @@ def custom_openapi() -> Dict[str, Any]:
     description=app.description,
   )
   openapi_schema["servers"] = [{"url": PUBLIC_SERVER_URL}]
+  components = openapi_schema.get("components") or {}
+  security_schemes = components.get("securitySchemes") or {}
+  security_schemes["DojaKey"] = {
+    "type": "apiKey",
+    "in": "header",
+    "name": "X-Doja-Key",
+    "description": "Static API key (see docs)",
+  }
+  components["securitySchemes"] = security_schemes
+  openapi_schema["components"] = components
+  openapi_schema["security"] = [{"DojaKey": []}]
   app.openapi_schema = openapi_schema
   return app.openapi_schema
 
