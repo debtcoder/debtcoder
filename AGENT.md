@@ -46,13 +46,15 @@ web/
 - Repo handoff docs: `AI_AGENT_HANDOFF.md`, `AGENT.md`, `AGENTS.md`
 - Git workspace for GitHub sync: `/home/debtcoder/debtcoder_repo`
 - Dashboard source: `/home/debtcoder/debtcoder_repo/dashboard` (Vite build → `dist/`)
+- Static about page: `web/www/debtcodersdoja.com/about.html` (sync to `/var/www/debtcodersdoja.com/about.html` during deploys)
 - Current API version: `0.2.0` (`API_VERSION` in `/etc/api-debtcodersdoja.env`)
-- Dashboard expects `VITE_API_BASE` and `VITE_API_KEY` (copy `dashboard/.env.example`, key must match `API_ACCESS_KEY`)
+- Dashboard expects `VITE_API_BASE` and `VITE_API_KEY` (copy `dashboard/.env.example`, key must match `API_ACCESS_KEY`).
+- Dashboard upload console shows full relative paths, supports directory filters, exposes copy-to-clipboard actions, and surfaces `profile.md` previews when present. If paths look truncated, rebuild the dashboard bundle and redeploy `/var/www/api.debtcodersdoja.com/dashboard/`.
 
 ## API Surface Highlights
 - `GET /uploads` → list uploads with size + modified stamps
 - `POST /upload` → multipart upload (supports multiple files)
-- `GET /upload/{filename}/text` → retrieve UTF-8 contents for editing (≤512 KiB)
+- `GET /upload/{filename}/text` → retrieve UTF-8 contents for editing (≤512 KiB); relies on `resolve_upload_path` so nested directories work via relative paths
 - `PUT /upload/{filename}` → overwrite/create a text file (UTF-8, ≤512 KiB)
 - `POST /upload/{filename}/rename` → rename file safely
 - `POST /uploads/command` → run limited shell-like commands (`ls`, `cat`, `rm`, `touch`, `mv`)
@@ -62,11 +64,13 @@ web/
 - `GET /fs/read` → read UTF-8 file content at any depth
 - `POST /fs/write` → write text payloads, auto-creating directories
 - `DELETE /fs/delete` → remove files inside uploads root
+- All uploads and summaries return paths relative to the uploads root (e.g., `Code_Tutor_Designer/TODO.md`) so the dashboard can display directory hierarchies without guesswork.
 - All JSON endpoints require header `X-Doja-Key` matching `API_ACCESS_KEY` from `/etc/api-debtcodersdoja.env` (dashboard handles this automatically).
 - OpenAPI advertises the header via `apiKey` security scheme; use the Authorize button in Swagger `/docs` with that same key.
 - Filesystem tips:
   - Omit `path` or use `/`/`.` to list the root uploads directory.
   - Accepts relative paths (e.g., `DebtCoder/profile.md`). Any leading `uploads/` segment is stripped automatically.
+  - Dashboard directory picker mirrors API results; ensure uploads API returns filenames relative to the uploads root after any backend changes.
 
 ## Deployment Checklist (Production)
 1. **App updates**
@@ -133,6 +137,7 @@ web/
   git commit -m "..."
   sudo env GIT_SSH_COMMAND="ssh -i /home/debtcoder/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new" git push
   ```
+  - If a privileged push creates root-owned refs, reset ownership with `sudo chown -R debtcoder:debtcoder .git/refs/remotes/origin` before the next sync.
 
 ## Notes & Limitations
 - Outbound network requires `sudo` due to seccomp restrictions.
