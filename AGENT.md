@@ -44,6 +44,16 @@ web/
 - NGINX configs: `/etc/nginx/sites-available/*.com`
 - Repo handoff docs: `AI_AGENT_HANDOFF.md`, `AGENT.md`, `AGENTS.md`
 - Git workspace for GitHub sync: `/home/debtcoder/debtcoder_repo`
+- Dashboard source: `/home/debtcoder/debtcoder_repo/dashboard` (Vite build → `dist/`)
+
+## API Surface Highlights
+- `GET /uploads` → list uploads with size + modified stamps
+- `POST /upload` → multipart upload (supports multiple files)
+- `GET /upload/{filename}/text` → retrieve UTF-8 contents for editing (≤512 KiB)
+- `PUT /upload/{filename}` → overwrite/create a text file (UTF-8, ≤512 KiB)
+- `POST /upload/{filename}/rename` → rename file safely
+- `POST /uploads/command` → run limited shell-like commands (`ls`, `cat`, `rm`, `touch`, `mv`)
+- `PUT /motd` → update `data/MOTD.md` (mirrors dashboard editor)
 
 ## Deployment Checklist (Production)
 1. **App updates**
@@ -73,6 +83,29 @@ web/
    curl -fsS "https://api.debtcodersdoja.com/duckduckgo?q=openai"
    curl -fsS https://api.debtcodersdoja.com/uploads
    ```
+
+## Dashboard Deployment
+1. Build the static bundle:
+   ```bash
+   cd /home/debtcoder/debtcoder_repo/dashboard
+   npm install
+   npm run build
+   ```
+2. Sync the contents to the web root:
+   ```bash
+   sudo mkdir -p /var/www/api.debtcodersdoja.com/dashboard
+   sudo rsync -av dist/ /var/www/api.debtcodersdoja.com/dashboard/
+   sudo chown -R www-data:www-data /var/www/api.debtcodersdoja.com/dashboard
+   ```
+3. Add an NGINX location block under `api.debtcodersdoja.com`:
+   ```nginx
+   location /dashboard/ {
+     alias /var/www/api.debtcodersdoja.com/dashboard/;
+     index index.html;
+     try_files $uri $uri/ /dashboard/index.html;
+   }
+   ```
+4. Reload NGINX and browse `https://api.debtcodersdoja.com/dashboard/`.
 
 ## GitHub Sync
 - Public repo: `git@github.com:debtcoder/debtcoder.git`

@@ -5,6 +5,7 @@
 - `AGENTS.md` (this document) should evolve as contributor processes mature.
 - `web/nginx/sites-available/` holds per-domain server blocks; mirror changes into `sites-enabled/` via symlinks.
 - `web/www/<domain>/index.html` stores static landing pages; add shared assets (fonts, images) under `web/www/shared/` if you introduce them.
+- `dashboard/` hosts the Vite + React cockpit that targets the FastAPI API; keep build artifacts under `dist/` out of version control.
 
 ## Build, Test, and Development Commands
 - No build pipeline exists; HTML/CSS are served as-is.
@@ -22,6 +23,7 @@
 - Manually load each domain in a browser or run `curl -I https://example` to confirm 200 responses and redirects.
 - Use `npx htmlhint web/www/debtcodersdojo.com/index.html` before committing markup changes; add `.htmlhintrc` if project-wide rules emerge.
 - After NGINX changes, run `sudo nginx -t` on the target host and monitor `/var/log/nginx/*.log` for regressions during rollout.
+- For dashboard work, run `npm run build` before sync; linting via `npm run lint` is optional but recommended when we add ESLint config.
 
 ## Commit & Pull Request Guidelines
 - Craft commits in the imperative mood with focused scope, e.g., `Add nginx block for dojo domain`.

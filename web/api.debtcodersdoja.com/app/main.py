@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import shlex
 import textwrap
 import time
 from datetime import datetime, timezone
@@ -22,6 +23,7 @@ MOTD_PATH = Path(os.getenv("API_MOTD_PATH", DATA_DIR / "MOTD.md"))
 PUBLIC_SERVER_URL = os.getenv("API_PUBLIC_URL", "https://api.debtcodersdoja.com")
 SERVICE_VERSION = os.getenv("API_VERSION", "0.1.0")
 DUCKDUCKGO_ENDPOINT = "https://api.duckduckgo.com/"
+MAX_TEXT_FILE_BYTES = int(os.getenv("API_TEXT_LIMIT_BYTES", "524288"))  # 512 KiB default
 
 START_TIME = time.time()
 
@@ -96,6 +98,31 @@ class UploadListingItem(BaseModel):
 
 class UploadListingResponse(BaseModel):
   files: List[UploadListingItem]
+
+
+class TextFilePayload(BaseModel):
+  content: str = Field(default="", description="UTF-8 encoded file contents")
+
+
+class MotdUpdateResponse(BaseModel):
+  message: str
+  bytes_written: int
+  updated_at: datetime
+
+
+class UploadCommandRequest(BaseModel):
+  command: str = Field(description="Terminal-like instruction: ls, cat <file>, rm <file>, touch <file>, mv <src> <dst>")
+
+
+class UploadCommandResponse(BaseModel):
+  command: str
+  output: List[str]
+  status: str
+  error: str | None = None
+
+
+class RenamePayload(BaseModel):
+  target: str = Field(description="Desired new filename for the specified upload")
 
 
 def sanitize_filename(filename: str) -> str:
@@ -207,6 +234,121 @@ def list_uploads() -> List[UploadListingItem]:
   return items
 
 
+def upload_path_from_name(filename: str) -> Path:
+  sanitized = sanitize_filename(filename or "")
+  return UPLOAD_DIR / sanitized
+
+
+def read_text_file(path: Path) -> str:
+  if not path.exists() or not path.is_file():
+    raise HTTPException(status_code=404, detail="File not found")
+  if path.stat().st_size > MAX_TEXT_FILE_BYTES:
+    raise HTTPException(status_code=413, detail="File too large to preview")
+  try:
+    return path.read_text(encoding="utf-8")
+  except UnicodeDecodeError as exc:
+    raise HTTPException(status_code=415, detail="File is not valid UTF-8") from exc
+
+
+def write_text_file(path: Path, content: str) -> UploadSummary:
+  path.parent.mkdir(parents=True, exist_ok=True)
+  encoded = content.encode("utf-8")
+  if len(encoded) > MAX_TEXT_FILE_BYTES:
+    raise HTTPException(status_code=413, detail="Text payload exceeds size limit")
+  try:
+    path.write_bytes(encoded)
+  except OSError as exc:
+    raise HTTPException(status_code=500, detail=f"Failed to write file {path.name}: {exc}") from exc
+  return UploadSummary(filename=path.name, bytes_written=len(encoded))
+
+
+def delete_upload_file(path: Path) -> UploadSummary:
+  if not path.exists() or not path.is_file():
+    raise HTTPException(status_code=404, detail="File not found")
+  size = path.stat().st_size
+  try:
+    path.unlink()
+  except OSError as exc:
+    raise HTTPException(status_code=500, detail=f"Failed to delete file {path.name}: {exc}") from exc
+  return UploadSummary(filename=path.name, bytes_written=size)
+
+
+def rename_upload_file(src_name: str, dest_name: str) -> UploadSummary:
+  src_path = upload_path_from_name(src_name)
+  dest_path = upload_path_from_name(dest_name)
+  if not src_path.exists() or not src_path.is_file():
+    raise HTTPException(status_code=404, detail="Source file not found")
+  if dest_path.exists():
+    raise HTTPException(status_code=409, detail="Destination file already exists")
+  try:
+    src_path.rename(dest_path)
+  except OSError as exc:
+    raise HTTPException(status_code=500, detail=f"Failed to rename file: {exc}") from exc
+  return UploadSummary(filename=dest_path.name, bytes_written=dest_path.stat().st_size)
+
+
+def run_upload_command(command: str) -> UploadCommandResponse:
+  command = command.strip()
+  if not command:
+    return UploadCommandResponse(command=command, output=[], status="noop", error="No command provided")
+
+  try:
+    args = shlex.split(command)
+  except ValueError as exc:
+    return UploadCommandResponse(command=command, output=[], status="error", error=str(exc))
+
+  if not args:
+    return UploadCommandResponse(command=command, output=[], status="noop", error="No command provided")
+
+  cmd, *rest = args
+  output: List[str] = []
+
+  try:
+    if cmd == "ls":
+      items = list_uploads()
+      if not items:
+        output.append("(empty)")
+      else:
+        for item in items:
+          output.append(f"{item.size_bytes:>8}  {item.modified_at.isoformat()}  {item.filename}")
+      status = "ok"
+    elif cmd == "cat":
+      if not rest:
+        raise HTTPException(status_code=400, detail="cat requires a filename")
+      content = read_text_file(upload_path_from_name(rest[0]))
+      output.extend(content.splitlines() or [""])
+      status = "ok"
+    elif cmd == "rm":
+      if not rest:
+        raise HTTPException(status_code=400, detail="rm requires a filename")
+      summary = delete_upload_file(upload_path_from_name(rest[0]))
+      output.append(f"deleted {summary.filename} ({summary.bytes_written} bytes)")
+      status = "ok"
+    elif cmd == "touch":
+      if not rest:
+        raise HTTPException(status_code=400, detail="touch requires a filename")
+      target_path = upload_path_from_name(rest[0])
+      if not target_path.exists():
+        summary = write_text_file(target_path, "")
+        output.append(f"created {summary.filename}")
+      else:
+        target_path.touch()
+        output.append(f"updated timestamp for {target_path.name}")
+      status = "ok"
+    elif cmd == "mv":
+      if len(rest) != 2:
+        raise HTTPException(status_code=400, detail="mv requires source and destination")
+      summary = rename_upload_file(rest[0], rest[1])
+      output.append(f"renamed to {summary.filename}")
+      status = "ok"
+    else:
+      return UploadCommandResponse(command=command, output=[], status="unknown", error=f"Unsupported command: {cmd}")
+  except HTTPException as exc:
+    return UploadCommandResponse(command=command, output=[], status="error", error=exc.detail if isinstance(exc.detail, str) else str(exc.detail))
+
+  return UploadCommandResponse(command=command, output=output, status=status)
+
+
 def motd_dependency() -> Path:
   path = ensure_motd_path()
   if not path.exists():
@@ -265,6 +407,17 @@ async def motd(path: Path = Depends(motd_dependency)) -> PlainTextResponse:
   return PlainTextResponse(content)
 
 
+@app.put("/motd", response_model=MotdUpdateResponse, tags=["content"])
+async def motd_update(payload: TextFilePayload, path: Path = Depends(motd_dependency)) -> MotdUpdateResponse:
+  summary = write_text_file(path, payload.content)
+  stat = path.stat()
+  return MotdUpdateResponse(
+    message="MOTD updated",
+    bytes_written=summary.bytes_written,
+    updated_at=datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc),
+  )
+
+
 @app.get("/duckduckgo", response_model=DuckDuckGoResponse, tags=["search"])
 async def duckduckgo(query: str = Query(..., alias="q", description="Search terms to send to DuckDuckGo")) -> DuckDuckGoResponse:
   if not query.strip():
@@ -309,8 +462,7 @@ async def uploads_list() -> UploadListingResponse:
 
 @app.get("/upload/{filename:path}", response_class=FileResponse, tags=["uploads"])
 async def upload_fetch(filename: str) -> FileResponse:
-  sanitized = sanitize_filename(filename)
-  file_path = UPLOAD_DIR / sanitized
+  file_path = upload_path_from_name(filename)
   if not file_path.exists() or not file_path.is_file():
     raise HTTPException(status_code=404, detail="File not found")
   return FileResponse(file_path)
@@ -318,16 +470,31 @@ async def upload_fetch(filename: str) -> FileResponse:
 
 @app.delete("/upload/{filename:path}", response_model=UploadSummary, tags=["uploads"])
 async def upload_delete(filename: str) -> UploadSummary:
-  sanitized = sanitize_filename(filename)
-  file_path = UPLOAD_DIR / sanitized
-  if not file_path.exists() or not file_path.is_file():
-    raise HTTPException(status_code=404, detail="File not found")
-  size = file_path.stat().st_size
-  try:
-    file_path.unlink()
-  except OSError as exc:
-    raise HTTPException(status_code=500, detail=f"Failed to delete file {sanitized}: {exc}") from exc
-  return UploadSummary(filename=sanitized, bytes_written=size)
+  file_path = upload_path_from_name(filename)
+  return delete_upload_file(file_path)
+
+
+@app.get("/upload/{filename:path}/text", response_model=TextFilePayload, tags=["uploads"])
+async def upload_text(filename: str) -> TextFilePayload:
+  file_path = upload_path_from_name(filename)
+  content = read_text_file(file_path)
+  return TextFilePayload(content=content)
+
+
+@app.put("/upload/{filename:path}", response_model=UploadSummary, tags=["uploads"])
+async def upload_put(filename: str, payload: TextFilePayload) -> UploadSummary:
+  target_path = upload_path_from_name(filename)
+  return write_text_file(target_path, payload.content)
+
+
+@app.post("/upload/{filename:path}/rename", response_model=UploadSummary, tags=["uploads"])
+async def upload_rename(filename: str, payload: RenamePayload) -> UploadSummary:
+  return rename_upload_file(filename, payload.target)
+
+
+@app.post("/uploads/command", response_model=UploadCommandResponse, tags=["uploads"])
+async def upload_command(request: UploadCommandRequest) -> UploadCommandResponse:
+  return run_upload_command(request.command)
 
 
 @app.exception_handler(httpx.HTTPError)
