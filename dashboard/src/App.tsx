@@ -52,8 +52,11 @@ function App() {
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
   const [commandHistory, setCommandHistory] = useState<string[]>([]);
   const historyCursorRef = useRef<number | null>(null);
-  const [rootFsItems, setRootFsItems] = useState<FSListItem[]>([]);
   const [selectedDirectory, setSelectedDirectory] = useState<string>('');
+  const [directoryUploads, setDirectoryUploads] = useState<UploadItem[]>([]);
+  const [isLoadingDirectory, setIsLoadingDirectory] = useState(false);
+  const [directoryCatalog, setDirectoryCatalog] = useState<string[]>([]);
+  const [copyFeedbackId, setCopyFeedbackId] = useState<string | null>(null);
   const [profileMarkdown, setProfileMarkdown] = useState<string | null>(null);
   const [isLoadingProfile, setIsLoadingProfile] = useState(false);
 
@@ -64,18 +67,69 @@ function App() {
     });
   }, []);
 
+  const registerDirectories = useCallback((items: FSListItem[]) => {
+    if (!items?.length) return;
+    setDirectoryCatalog((current) => {
+      const next = new Set(current);
+      items.forEach((item) => {
+        if (item.is_dir) {
+          next.add(item.path);
+        }
+      });
+      return Array.from(next).sort((a, b) => a.localeCompare(b));
+    });
+  }, []);
+
+  const refreshDirectory = useCallback(
+    async (directory: string) => {
+      if (!directory) {
+        setDirectoryUploads([]);
+        return;
+      }
+      setIsLoadingDirectory(true);
+      try {
+        const items = await fetchFSList(directory);
+        registerDirectories(items);
+        const files = items.filter((item) => !item.is_dir);
+        setDirectoryUploads(
+          files.map((item) => ({
+            filename: item.path,
+            size_bytes: typeof item.size_bytes === 'number' ? item.size_bytes : 0,
+            modified_at: item.modified_at,
+          }))
+        );
+      } catch (error) {
+        console.error(error);
+        setDirectoryUploads([]);
+        pushToast({ title: `Failed to load ${directory}`, detail: String(error), tone: 'error' });
+      } finally {
+        setIsLoadingDirectory(false);
+      }
+    },
+    [registerDirectories, pushToast]
+  );
+
   const refreshUploads = useCallback(async () => {
     try {
       setIsLoadingUploads(true);
       const data = await fetchUploads();
       setUploads(data);
+      try {
+        const fsItems = await fetchFSList();
+        registerDirectories(fsItems);
+      } catch (error) {
+        console.error('Failed to load directory index', error);
+      }
+      if (selectedDirectory) {
+        await refreshDirectory(selectedDirectory);
+      }
     } catch (error) {
       console.error(error);
       pushToast({ title: 'Failed to load uploads', detail: String(error), tone: 'error' });
     } finally {
       setIsLoadingUploads(false);
     }
-  }, [pushToast]);
+  }, [pushToast, registerDirectories, refreshDirectory, selectedDirectory]);
 
   const refreshDiagnostics = useCallback(async () => {
     try {
@@ -105,8 +159,6 @@ function App() {
 
   const bootstrap = useCallback(async () => {
     await Promise.all([refreshUploads(), refreshDiagnostics(), loadMotd()]);
-    const fsItems = await fetchFSList().catch(() => []);
-    setRootFsItems(fsItems);
   }, [refreshUploads, refreshDiagnostics, loadMotd]);
 
   useEffect(() => {
@@ -121,6 +173,25 @@ function App() {
     }, AUTO_REFRESH_INTERVAL);
     return () => window.clearInterval(timer);
   }, [autoRefreshEnabled, refreshUploads, refreshDiagnostics]);
+
+  useEffect(() => {
+    if (!selectedDirectory) {
+      setDirectoryUploads([]);
+      setIsLoadingDirectory(false);
+      return;
+    }
+    refreshDirectory(selectedDirectory);
+  }, [selectedDirectory, refreshDirectory]);
+
+  useEffect(() => {
+    if (!selectedDirectory) return;
+    setDirectoryCatalog((current) => {
+      if (current.includes(selectedDirectory)) {
+        return current;
+      }
+      return [...current, selectedDirectory].sort((a, b) => a.localeCompare(b));
+    });
+  }, [selectedDirectory]);
 
   const loadFileIntoEditor = useCallback(
     async (filename: string) => {
@@ -200,6 +271,28 @@ function App() {
       setIsSavingMotd(false);
     }
   }, [motdDraft, pushToast]);
+
+  const handleCopyPath = useCallback(
+    (path: string) => {
+      if (!navigator?.clipboard) {
+        pushToast({ title: 'Clipboard unsupported', tone: 'error' });
+        return;
+      }
+      navigator.clipboard
+        .writeText(path)
+        .then(() => {
+          setCopyFeedbackId(path);
+          window.setTimeout(() => {
+            setCopyFeedbackId((current) => (current === path ? null : current));
+          }, 1500);
+        })
+        .catch((error) => {
+          console.error(error);
+          pushToast({ title: 'Unable to copy path', detail: String(error), tone: 'error' });
+        });
+    },
+    [pushToast]
+  );
 
   const handleRunCommand = useCallback(
     async (command: string) => {
@@ -285,26 +378,21 @@ function App() {
 
   const motdCharCount = motdDraft.length;
 
-  const directoryOptions = useMemo(() => {
-    const set = new Set<string>();
-    rootFsItems.forEach((item) => {
-      if (item.is_dir) set.add(item.path);
-    });
-    uploads.forEach((item) => {
-      const segments = item.filename.split('/');
-      if (segments.length > 1) {
-        for (let depth = 1; depth < segments.length; depth += 1) {
-          set.add(segments.slice(0, depth).join('/'));
-        }
-      }
-    });
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [rootFsItems, uploads]);
+  const directoryOptions = useMemo(
+    () => directoryCatalog.slice().sort((a, b) => a.localeCompare(b)),
+    [directoryCatalog]
+  );
 
-  const visibleUploads = useMemo(() => {
-    if (!selectedDirectory) return uploads;
-    return uploads.filter((item) => item.filename.startsWith(`${selectedDirectory}/`));
-  }, [uploads, selectedDirectory]);
+  const currentUploads = selectedDirectory ? directoryUploads : uploads;
+  const isLoadingCurrentUploads = selectedDirectory ? isLoadingDirectory : isLoadingUploads;
+
+  const currentDirectoryStats = useMemo(() => {
+    if (currentUploads.length === 0) {
+      return { count: 0, bytes: 0 };
+    }
+    const bytes = currentUploads.reduce((total, item) => total + item.size_bytes, 0);
+    return { count: currentUploads.length, bytes };
+  }, [currentUploads]);
 
   const quickStats = useMemo(() => {
     if (!diagnostics) return [];
@@ -317,15 +405,16 @@ function App() {
   }, [diagnostics]);
 
   const handleTemplate = useCallback(() => {
-    setSelectedFile('create.md');
+    const target = selectedDirectory ? `${selectedDirectory}/create.md` : 'create.md';
+    setSelectedFile(target);
     setEditorValue(SAMPLE_MARKDOWN);
     setIsEditorDirty(true);
-    pushToast({ title: 'Template loaded', detail: 'Ready to edit create.md' });
-  }, [pushToast]);
+    pushToast({ title: 'Template loaded', detail: `Ready to edit ${target}` });
+  }, [pushToast, selectedDirectory]);
 
   useEffect(() => {
     const profileTarget = selectedDirectory ? `${selectedDirectory}/profile.md` : 'profile.md';
-    const hasProfile = uploads.some((item) => item.filename === profileTarget);
+    const hasProfile = currentUploads.some((item) => item.filename === profileTarget);
     if (!hasProfile) {
       setProfileMarkdown(null);
       setIsLoadingProfile(false);
@@ -342,7 +431,7 @@ function App() {
         pushToast({ title: 'Failed to load profile.md', detail: String(error), tone: 'error' });
       })
       .finally(() => setIsLoadingProfile(false));
-  }, [selectedDirectory, uploads, pushToast]);
+  }, [selectedDirectory, currentUploads, pushToast]);
 
   return (
     <div className="app-shell">
@@ -399,6 +488,12 @@ function App() {
               ))}
             </select>
           </div>
+          <div className="directory-summary" role="presentation">
+            <span className="directory-summary__label">Files</span>
+            <span className="directory-summary__value">{currentDirectoryStats.count}</span>
+            <span className="directory-summary__label">Bytes</span>
+            <span className="directory-summary__value">{formatBytes(currentDirectoryStats.bytes)}</span>
+          </div>
         </div>
         {(profileMarkdown || isLoadingProfile) && (
           <div className="profile-card">
@@ -411,31 +506,67 @@ function App() {
             </div>
           </div>
         )}
-        <div className="upload-list">
-          {isLoadingUploads && <div>Loading uploads…</div>}
-          {!isLoadingUploads && visibleUploads.length === 0 && <div>No uploads yet. Drop a file or run `touch` in the terminal.</div>}
-          {visibleUploads.map((item) => (
-            <div key={item.filename} className="upload-item">
-              <div className="upload-item__name">{item.filename}</div>
-                <div>{formatBytes(item.size_bytes)}</div>
-                <div>{new Date(item.modified_at).toLocaleString()}</div>
-                <div className="upload-actions">
-                  <button className="button button--ghost" onClick={() => loadFileIntoEditor(item.filename)}>
-                    Edit
-                  </button>
-                  <button className="button button--ghost" onClick={() => handleRename(item.filename)}>
-                    Rename
-                  </button>
-                  <button className="button button--ghost" onClick={() => window.open(`${import.meta.env.VITE_API_BASE ?? 'https://api.debtcodersdoja.com'}/upload/${encodeURIComponent(item.filename)}`, '_blank')}>
-                    Download
-                  </button>
-                  <button className="button button--ghost" onClick={() => handleFileDelete(item.filename)}>
-                    Delete
-                  </button>
-                </div>
-              </div>
-            ))}
+        <div className="upload-table" role="table" aria-label="Uploads">
+          <div className="upload-header" role="row">
+            <span role="columnheader">Filename</span>
+            <span role="columnheader">Size</span>
+            <span role="columnheader">Modified</span>
+            <span role="columnheader" className="upload-header__actions">Actions</span>
           </div>
+          {isLoadingCurrentUploads && (
+            <div className="upload-row upload-row--status" role="row">
+              <span role="cell">Loading {selectedDirectory ? `${selectedDirectory}…` : 'uploads…'}</span>
+            </div>
+          )}
+          {!isLoadingCurrentUploads && currentUploads.length === 0 && (
+            <div className="upload-row upload-row--status" role="row">
+              <span role="cell">
+                {selectedDirectory
+                  ? `No files yet inside ${selectedDirectory}. Drop one with the uploader or run touch via the terminal.`
+                  : 'No uploads yet. Drop a file or run `touch` in the terminal.'}
+              </span>
+            </div>
+          )}
+          {currentUploads.map((item) => (
+            <div key={item.filename} className="upload-item" role="row">
+              <div className="upload-item__name" role="cell">
+                <span className="upload-item__path">{item.filename}</span>
+                <button
+                  type="button"
+                  className="button button--ghost button--mini"
+                  onClick={() => handleCopyPath(item.filename)}
+                  aria-label={`Copy path for ${item.filename}`}
+                >
+                  {copyFeedbackId === item.filename ? 'Copied' : 'Copy'}
+                </button>
+              </div>
+              <div role="cell">{formatBytes(item.size_bytes)}</div>
+              <div role="cell">{new Date(item.modified_at).toLocaleString()}</div>
+              <div className="upload-actions" role="cell">
+                <button className="button button--ghost" onClick={() => loadFileIntoEditor(item.filename)}>
+                  Edit
+                </button>
+                <button className="button button--ghost" onClick={() => handleRename(item.filename)}>
+                  Rename
+                </button>
+                <button
+                  className="button button--ghost"
+                  onClick={() =>
+                    window.open(
+                      `${import.meta.env.VITE_API_BASE ?? 'https://api.debtcodersdoja.com'}/upload/${encodeURIComponent(item.filename)}`,
+                      '_blank'
+                    )
+                  }
+                >
+                  Download
+                </button>
+                <button className="button button--ghost" onClick={() => handleFileDelete(item.filename)}>
+                  Delete
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
         </section>
 
         <section className="card">
@@ -563,6 +694,13 @@ function App() {
           </div>
         ))}
       </div>
+
+      <footer className="app-footer">
+        <span className="app-footer__label">Meet the community →</span>
+        <a className="app-footer__link" href="https://www.reddit.com/r/debtcodersdojo/" target="_blank" rel="noopener noreferrer">
+          r/debtcodersdojo
+        </a>
+      </footer>
     </div>
   );
 }

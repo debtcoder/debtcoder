@@ -344,8 +344,7 @@ def list_uploads() -> List[UploadListingItem]:
 
 
 def upload_path_from_name(filename: str) -> Path:
-  sanitized = sanitize_filename(filename or "")
-  return UPLOAD_DIR / sanitized
+  return resolve_upload_path(filename)
 
 
 def read_text_file(path: Path) -> str:
@@ -368,7 +367,7 @@ def write_text_file(path: Path, content: str) -> UploadSummary:
     path.write_bytes(encoded)
   except OSError as exc:
     raise HTTPException(status_code=500, detail=f"Failed to write file {path.name}: {exc}") from exc
-  return UploadSummary(filename=path.name, bytes_written=len(encoded))
+  return UploadSummary(filename=relative_from_uploads(path), bytes_written=len(encoded))
 
 
 def delete_upload_file(path: Path) -> UploadSummary:
@@ -379,7 +378,7 @@ def delete_upload_file(path: Path) -> UploadSummary:
     path.unlink()
   except OSError as exc:
     raise HTTPException(status_code=500, detail=f"Failed to delete file {path.name}: {exc}") from exc
-  return UploadSummary(filename=path.name, bytes_written=size)
+  return UploadSummary(filename=relative_from_uploads(path), bytes_written=size)
 
 
 def rename_upload_file(src_name: str, dest_name: str) -> UploadSummary:
@@ -393,7 +392,7 @@ def rename_upload_file(src_name: str, dest_name: str) -> UploadSummary:
     src_path.rename(dest_path)
   except OSError as exc:
     raise HTTPException(status_code=500, detail=f"Failed to rename file: {exc}") from exc
-  return UploadSummary(filename=dest_path.name, bytes_written=dest_path.stat().st_size)
+  return UploadSummary(filename=relative_from_uploads(dest_path), bytes_written=dest_path.stat().st_size)
 
 
 def run_upload_command(command: str) -> UploadCommandResponse:
@@ -595,7 +594,7 @@ async def upload(files: List[UploadFile] = File(...)) -> List[UploadSummary]:
     finally:
       await upload_file.close()
 
-    saved.append(UploadSummary(filename=destination.name, bytes_written=len(content)))
+    saved.append(UploadSummary(filename=relative_from_uploads(destination), bytes_written=len(content)))
 
   return saved
 
@@ -604,6 +603,13 @@ async def upload(files: List[UploadFile] = File(...)) -> List[UploadSummary]:
 async def uploads_list() -> UploadListingResponse:
   items = list_uploads()
   return UploadListingResponse(files=items)
+
+
+@app.get("/upload/{filename:path}/text", response_model=TextFilePayload, tags=["uploads"])
+async def upload_text(filename: str) -> TextFilePayload:
+  file_path = upload_path_from_name(filename)
+  content = read_text_file(file_path)
+  return TextFilePayload(content=content)
 
 
 @app.get("/upload/{filename:path}", response_class=FileResponse, tags=["uploads"])
@@ -618,13 +624,6 @@ async def upload_fetch(filename: str) -> FileResponse:
 async def upload_delete(filename: str) -> UploadSummary:
   file_path = upload_path_from_name(filename)
   return delete_upload_file(file_path)
-
-
-@app.get("/upload/{filename:path}/text", response_model=TextFilePayload, tags=["uploads"])
-async def upload_text(filename: str) -> TextFilePayload:
-  file_path = upload_path_from_name(filename)
-  content = read_text_file(file_path)
-  return TextFilePayload(content=content)
 
 
 @app.put("/upload/{filename:path}", response_model=UploadSummary, tags=["uploads"])
