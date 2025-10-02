@@ -1,0 +1,19 @@
+[Unit]
+Description=Debt Coders Doja API service
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+EnvironmentFile=/etc/api-debtcodersdoja.env
+WorkingDirectory=/srv/api.debtcodersdoja.com
+ExecStart=/srv/api.debtcodersdoja.com/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 9102 --proxy-headers --forwarded-allow-ips "*"
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGINT
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

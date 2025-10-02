@@ -1,0 +1,29 @@
+# Python virtual environments
+.venv/
+venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Node/npm
+node_modules/
+
+# Environment & secrets
+.env
+*.env
+.env.*
+
+# Logs & runtime artifacts
+*.log
+*.pid
+*.sqlite3
+
+# Local uploads and generated assets
+uploads/
+*.pem
+
+# OS cruft
+.DS_Store
+Thumbs.db

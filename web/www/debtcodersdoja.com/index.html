@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Debt Coders Doja</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3.5rem 1.5rem;
+      background: linear-gradient(135deg, #020024 0%, #090979 45%, #00d4ff 100%);
+      font-family: 'Inter', system-ui, sans-serif;
+      color: #0b0d17;
+    }
+    main {
+      max-width: 720px;
+      width: 100%;
+      background: rgba(255,255,255,0.9);
+      border-radius: 22px;
+      padding: clamp(2.2rem, 4vw, 3.4rem);
+      box-shadow: 0 28px 60px rgba(2, 7, 34, 0.25);
+      text-align: center;
+    }
+    .hero {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 2.2rem;
+    }
+    .hero img {
+      max-width: clamp(240px, 46vw, 300px);
+      width: 100%;
+      height: auto;
+      border-radius: 16px;
+      box-shadow: 0 18px 44px rgba(2, 7, 34, 0.22);
+    }
+    h1 {
+      font-size: clamp(2.3rem, 4vw, 3.1rem);
+      margin-bottom: 1rem;
+      letter-spacing: -0.02em;
+    }
+    p {
+      font-size: 1.05rem;
+      line-height: 1.7;
+      margin: 0 auto 1.9rem;
+      max-width: 54ch;
+    }
+    .pill-list {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 0.75rem;
+      margin-bottom: 2.2rem;
+    }
+    .pill {
+      padding: 0.55rem 1.4rem;
+      border-radius: 999px;
+      background: rgba(11,13,23,0.08);
+      font-weight: 600;
+      letter-spacing: 0.03em;
+    }
+    .cta {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.9rem 1.9rem;
+      background: #0b0d17;
+      color: white;
+      text-decoration: none;
+      border-radius: 12px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .cta:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 16px 30px rgba(11,13,23,0.25);
+    }
+    .contact-links {
+      margin-top: 1.7rem;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 1rem;
+      font-size: 0.95rem;
+    }
+    .contact-links a {
+      color: #0b0d17;
+      text-decoration: none;
+      padding: 0.35rem 0.8rem;
+      border-radius: 999px;
+      border: 1px solid rgba(11,13,23,0.1);
+      transition: background 0.2s ease, color 0.2s ease;
+    }
+    .contact-links a:hover {
+      background: rgba(11,13,23,0.08);
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="hero">
+      <img src="doja.png" alt="Debt Coders Doja brand illustration">
+    </div>
+    <h1>Debt Coders Doja</h1>
+    <p>Partner studio for fintech founders. We blend deep domain expertise with design-forward engineering to launch standout product experiences and investor-ready prototypes.</p>
+    <div class="pill-list">
+      <span class="pill">Rapid Venture Builds</span>
+      <span class="pill">Investor Collateral</span>
+      <span class="pill">Design Systems</span>
+      <span class="pill">AI Workflow Automation</span>
+    </div>
+    <a class="cta" href="mailto:debtcoder@gmail.com">Collaborate with the studio</a>
+    <div class="contact-links">
+      <a href="mailto:debtcoder@gmail.com">debtcoder@gmail.com</a>
+      <a href="https://github.com/debtcoder" target="_blank" rel="noopener">github.com/debtcoder</a>
+    </div>
+  </main>
+</body>
+</html>
