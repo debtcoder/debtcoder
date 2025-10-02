@@ -9,6 +9,7 @@
 
 ## Current State
 - FastAPI service deployed under systemd as `api-debtcodersdoja.service` (proxied by NGINX on 443).
+- Current API version: `0.2.0` (set via `API_VERSION` in `/etc/api-debtcodersdoja.env`).
 - Certificates issued and valid for all domains (check `certbot certificates`).
 - GitHub repository `git@github.com:debtcoder/debtcoder.git` contains the curated infrastructure snapshot (branch `main`).
 - Network egress for unprivileged commands is restricted; use `sudo` for outbound network operations (Git pushes, curl to external hosts, etc.).

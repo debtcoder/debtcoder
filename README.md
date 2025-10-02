@@ -55,6 +55,7 @@ Ship the compiled `dist/` via NGINX (e.g., `/var/www/api.debtcodersdoja.com/dash
 - `/fs/write` – write/update text files (auto-creates folders)
 - `/fs/delete` – remove files inside uploads
 - Swagger `/docs` exposes the same key via “Authorize” (API key in header).
+- Current API version: `0.2.0` (configure via `API_VERSION` in `/etc/api-debtcodersdoja.env`).
 - Tip: leave `path` empty (or `/`) with `/fs/list` for the root; `uploads/` prefixes are stripped automatically.
 - Legacy multipart upload still lives at `/upload`
 
