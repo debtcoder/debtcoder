@@ -48,5 +48,12 @@ npm run build
 
 Ship the compiled `dist/` via NGINX (e.g., `/var/www/api.debtcodersdoja.com/dashboard`) or any static host.
 
+### API quick hits
+- `/fs/list` – list files/directories under uploads (optional `path` query)
+- `/fs/read` – stream UTF-8 file content from uploads
+- `/fs/write` – write/update text files (auto-creates folders)
+- `/fs/delete` – remove files inside uploads
+- Legacy multipart upload still lives at `/upload`
+
 ## Hit me up
 Maintainer: debtCoder <debtcoder@gmail.com>

@@ -7,7 +7,7 @@ import textwrap
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import httpx
 from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
@@ -124,6 +124,26 @@ class UploadCommandResponse(BaseModel):
 
 class RenamePayload(BaseModel):
   target: str = Field(description="Desired new filename for the specified upload")
+
+
+class FSListItem(BaseModel):
+  path: str
+  is_dir: bool
+  size_bytes: Optional[int]
+  modified_at: datetime
+
+
+class FSListResponse(BaseModel):
+  items: List[FSListItem]
+
+
+class FSWritePayload(BaseModel):
+  filename: str = Field(description="Path relative to uploads root")
+  content: str = Field(description="File contents to write (UTF-8)")
+
+
+class FSDeletePayload(BaseModel):
+  filename: str = Field(description="Path relative to uploads root")
 
 
 def sanitize_filename(filename: str) -> str:
@@ -354,6 +374,20 @@ def render_markdown(content: str) -> str:
   return markdown.markdown(content, extensions=["extra", "sane_lists", "smarty"])
 
 
+def resolve_upload_path(raw_path: str) -> Path:
+  raw_path = raw_path.lstrip("/\\")
+  candidate = (UPLOAD_DIR / raw_path).resolve()
+  try:
+    candidate.relative_to(UPLOAD_DIR.resolve())
+  except ValueError as exc:
+    raise HTTPException(status_code=400, detail="Path escapes uploads directory") from exc
+  return candidate
+
+
+def relative_from_uploads(path: Path) -> str:
+  return str(path.relative_to(UPLOAD_DIR.resolve()))
+
+
 def motd_dependency() -> Path:
   path = ensure_motd_path()
   if not path.exists():
@@ -510,6 +544,49 @@ async def upload_rename(filename: str, payload: RenamePayload) -> UploadSummary:
 @app.post("/uploads/command", response_model=UploadCommandResponse, tags=["uploads"])
 async def upload_command(request: UploadCommandRequest) -> UploadCommandResponse:
   return run_upload_command(request.command)
+
+
+@app.get("/fs/list", response_model=FSListResponse, tags=["uploads"])
+async def fs_list(path: Optional[str] = Query(default=None, description="Subdirectory to list")) -> FSListResponse:
+  target = resolve_upload_path(path or "")
+  if not target.exists():
+    raise HTTPException(status_code=404, detail="Directory not found")
+  if target.is_file():
+    raise HTTPException(status_code=400, detail="Path points to a file")
+
+  items: List[FSListItem] = []
+  for entry in sorted(target.iterdir(), key=lambda p: p.name.lower()):
+    stat = entry.stat()
+    items.append(
+      FSListItem(
+        path=relative_from_uploads(entry),
+        is_dir=entry.is_dir(),
+        size_bytes=None if entry.is_dir() else stat.st_size,
+        modified_at=datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc),
+      )
+    )
+  return FSListResponse(items=items)
+
+
+@app.get("/fs/read", response_model=TextFilePayload, tags=["uploads"])
+async def fs_read(path: str = Query(description="File path relative to uploads root")) -> TextFilePayload:
+  file_path = resolve_upload_path(path)
+  content = read_text_file(file_path)
+  return TextFilePayload(content=content)
+
+
+@app.post("/fs/write", response_model=UploadSummary, tags=["uploads"])
+async def fs_write(payload: FSWritePayload) -> UploadSummary:
+  target_path = resolve_upload_path(payload.filename)
+  return write_text_file(target_path, payload.content)
+
+
+@app.delete("/fs/delete", response_model=UploadSummary, tags=["uploads"])
+async def fs_delete(payload: FSDeletePayload) -> UploadSummary:
+  target_path = resolve_upload_path(payload.filename)
+  if target_path.is_dir():
+    raise HTTPException(status_code=400, detail="Refusing to delete directories via API")
+  return delete_upload_file(target_path)
 
 
 @app.exception_handler(httpx.HTTPError)

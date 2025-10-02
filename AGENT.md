@@ -55,6 +55,10 @@ web/
 - `POST /uploads/command` → run limited shell-like commands (`ls`, `cat`, `rm`, `touch`, `mv`)
 - `PUT /motd` → update `data/MOTD.md` (mirrors dashboard editor)
 - `GET /motd/html` → Markdown rendered HTML for embedding on landing pages
+- `GET /fs/list` → enumerate files and directories (optional `path` query)
+- `GET /fs/read` → read UTF-8 file content at any depth
+- `POST /fs/write` → write text payloads, auto-creating directories
+- `DELETE /fs/delete` → remove files inside uploads root
 
 ## Deployment Checklist (Production)
 1. **App updates**

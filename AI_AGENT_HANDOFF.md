@@ -18,6 +18,7 @@ You are operating directly on the live production host. Root-level changes are e
   - `POST /upload/{filename}/rename`
   - `POST /uploads/command`
   - `PUT /motd`
+  - `GET /fs/list`, `GET /fs/read`, `POST /fs/write`, `DELETE /fs/delete`
 - Dashboard assets (React/Vite) live in `/home/debtcoder/debtcoder_repo/dashboard`; build output expected at `/var/www/api.debtcodersdoja.com/dashboard` if published.
 
 ## Environment Context Block
