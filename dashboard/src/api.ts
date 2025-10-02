@@ -29,6 +29,13 @@ export type Diagnostics = {
   python_version: string;
 };
 
+export type FSListItem = {
+  path: string;
+  is_dir: boolean;
+  size_bytes: number | null;
+  modified_at: string;
+};
+
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? 'https://api.debtcodersdoja.com';
 
 async function handleResponse<T>(response: Response): Promise<T> {
@@ -119,6 +126,26 @@ export async function fetchDiagnostics(): Promise<Diagnostics> {
   const response = await fetch(`${API_BASE}/diagnostics`);
   return handleResponse<Diagnostics>(response);
 }
+
+export async function fetchFSList(path?: string): Promise<FSListItem[]> {
+  const url = new URL(`${API_BASE}/fs/list`);
+  if (path) url.searchParams.set('path', path);
+  const response = await fetch(url.toString());
+  const payload = await handleResponse<{ items: FSListItem[] }>(response);
+  return payload.items;
+}
+
+export async function fetchFileText(path: string): Promise<string> {
+  const url = new URL(`${API_BASE}/fs/read`);
+  url.searchParams.set('path', path);
+  const response = await fetch(url.toString());
+  const payload = await handleResponse<TextFilePayload>(response);
+  return payload.content;
+}
+
+type TextFilePayload = {
+  content: string;
+};
 
 export function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B';

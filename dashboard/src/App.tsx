@@ -9,6 +9,8 @@ import {
   fetchMotd,
   fetchUploadText,
   fetchUploads,
+  fetchFSList,
+  fetchFileText,
   formatBytes,
   renameUpload,
   runUploadCommand,
@@ -17,7 +19,7 @@ import {
   uploadFiles,
   deleteUpload,
 } from './api';
-import type { Diagnostics, UploadItem, UploadCommandResponse } from './api';
+import type { Diagnostics, UploadItem, UploadCommandResponse, FSListItem } from './api';
 import { useToasts } from './hooks';
 
 const SAMPLE_MARKDOWN = `# Fresh Playbook
@@ -50,6 +52,10 @@ function App() {
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
   const [commandHistory, setCommandHistory] = useState<string[]>([]);
   const historyCursorRef = useRef<number | null>(null);
+  const [rootFsItems, setRootFsItems] = useState<FSListItem[]>([]);
+  const [selectedDirectory, setSelectedDirectory] = useState<string>('');
+  const [profileMarkdown, setProfileMarkdown] = useState<string | null>(null);
+  const [isLoadingProfile, setIsLoadingProfile] = useState(false);
 
   const appendTerminal = useCallback((lines: string[]) => {
     setTerminalLines((current) => {
@@ -99,6 +105,8 @@ function App() {
 
   const bootstrap = useCallback(async () => {
     await Promise.all([refreshUploads(), refreshDiagnostics(), loadMotd()]);
+    const fsItems = await fetchFSList().catch(() => []);
+    setRootFsItems(fsItems);
   }, [refreshUploads, refreshDiagnostics, loadMotd]);
 
   useEffect(() => {
@@ -277,6 +285,27 @@ function App() {
 
   const motdCharCount = motdDraft.length;
 
+  const directoryOptions = useMemo(() => {
+    const set = new Set<string>();
+    rootFsItems.forEach((item) => {
+      if (item.is_dir) set.add(item.path);
+    });
+    uploads.forEach((item) => {
+      const segments = item.filename.split('/');
+      if (segments.length > 1) {
+        for (let depth = 1; depth < segments.length; depth += 1) {
+          set.add(segments.slice(0, depth).join('/'));
+        }
+      }
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [rootFsItems, uploads]);
+
+  const visibleUploads = useMemo(() => {
+    if (!selectedDirectory) return uploads;
+    return uploads.filter((item) => item.filename.startsWith(`${selectedDirectory}/`));
+  }, [uploads, selectedDirectory]);
+
   const quickStats = useMemo(() => {
     if (!diagnostics) return [];
     return [
@@ -293,6 +322,27 @@ function App() {
     setIsEditorDirty(true);
     pushToast({ title: 'Template loaded', detail: 'Ready to edit create.md' });
   }, [pushToast]);
+
+  useEffect(() => {
+    const profileTarget = selectedDirectory ? `${selectedDirectory}/profile.md` : 'profile.md';
+    const hasProfile = uploads.some((item) => item.filename === profileTarget);
+    if (!hasProfile) {
+      setProfileMarkdown(null);
+      setIsLoadingProfile(false);
+      return;
+    }
+    setIsLoadingProfile(true);
+    fetchFileText(profileTarget)
+      .then((content) => {
+        setProfileMarkdown(content);
+      })
+      .catch((error) => {
+        console.error(error);
+        setProfileMarkdown(null);
+        pushToast({ title: 'Failed to load profile.md', detail: String(error), tone: 'error' });
+      })
+      .finally(() => setIsLoadingProfile(false));
+  }, [selectedDirectory, uploads, pushToast]);
 
   return (
     <div className="app-shell">
@@ -331,13 +381,42 @@ function App() {
 
       <div className="app-frame">
         <section className="card">
-          <div className="card__title">Uploads <span>{uploads.length} tracked</span></div>
-          <div className="upload-list">
-            {isLoadingUploads && <div>Loading uploads…</div>}
-            {!isLoadingUploads && uploads.length === 0 && <div>No uploads yet. Drop a file or run `touch` in the terminal.</div>}
-            {uploads.map((item) => (
-              <div key={item.filename} className="upload-item">
-                <div className="upload-item__name">{item.filename}</div>
+        <div className="card__title">Uploads <span>{uploads.length} tracked</span></div>
+        <div className="section-grid" style={{ gridTemplateColumns: 'minmax(0, 1fr)' }}>
+          <div className="field">
+            <label htmlFor="directory-select">Directory</label>
+            <select
+              id="directory-select"
+              className="text-input"
+              value={selectedDirectory}
+              onChange={(event) => setSelectedDirectory(event.target.value)}
+            >
+              <option value="">All uploads</option>
+              {directoryOptions.map((dir) => (
+                <option key={dir} value={dir}>
+                  {dir}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        {(profileMarkdown || isLoadingProfile) && (
+          <div className="profile-card">
+            <div className="profile-card__header">
+              <span className="profile-card__badge">Profile</span>
+              <span className="profile-card__dir">{selectedDirectory || 'root'}</span>
+            </div>
+            <div className="profile-card__body">
+              {isLoadingProfile ? <div>Loading profile…</div> : <ReactMarkdown>{profileMarkdown ?? ''}</ReactMarkdown>}
+            </div>
+          </div>
+        )}
+        <div className="upload-list">
+          {isLoadingUploads && <div>Loading uploads…</div>}
+          {!isLoadingUploads && visibleUploads.length === 0 && <div>No uploads yet. Drop a file or run `touch` in the terminal.</div>}
+          {visibleUploads.map((item) => (
+            <div key={item.filename} className="upload-item">
+              <div className="upload-item__name">{item.filename}</div>
                 <div>{formatBytes(item.size_bytes)}</div>
                 <div>{new Date(item.modified_at).toLocaleString()}</div>
                 <div className="upload-actions">
