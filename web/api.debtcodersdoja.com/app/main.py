@@ -56,12 +56,32 @@ app.add_middleware(
 )
 
 
+PUBLIC_PATHS = {
+  "/",
+  "/privacy",
+  "/motd",
+  "/motd/html",
+  "/healthz",
+  "/docs",
+  "/openapi.json",
+  "/redoc",
+}
+
+PUBLIC_PREFIXES = (
+  "/dashboard/",
+  "/.well-known/",
+)
+
+
 @app.middleware("http")
 async def enforce_api_key(request: Request, call_next):
+  path = request.url.path
   if API_ACCESS_KEY:
-    header_value = request.headers.get("x-doja-key")
-    if header_value != API_ACCESS_KEY:
-      return JSONResponse(status_code=401, content={"detail": "API key required"})
+    public = path in PUBLIC_PATHS or any(path.startswith(prefix) for prefix in PUBLIC_PREFIXES)
+    if not public:
+      header_value = request.headers.get("x-doja-key")
+      if header_value != API_ACCESS_KEY:
+        return JSONResponse(status_code=401, content={"detail": "API key required"})
   return await call_next(request)
 
 
