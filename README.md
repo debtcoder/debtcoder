@@ -49,6 +49,7 @@ npm run build
 Ship the compiled `dist/` via NGINX (e.g., `/var/www/api.debtcodersdoja.com/dashboard`) or any static host.
 
 ### API quick hits
+- Send `X-Doja-Key: <secret>` on every request (value lives in `/etc/api-debtcodersdoja.env`).
 - `/fs/list` – list files/directories under uploads (optional `path` query)
 - `/fs/read` – stream UTF-8 file content from uploads
 - `/fs/write` – write/update text files (auto-creates folders)

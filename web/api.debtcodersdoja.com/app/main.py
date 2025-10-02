@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import httpx
-from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
@@ -25,11 +25,13 @@ PUBLIC_SERVER_URL = os.getenv("API_PUBLIC_URL", "https://api.debtcodersdoja.com"
 SERVICE_VERSION = os.getenv("API_VERSION", "0.1.0")
 DUCKDUCKGO_ENDPOINT = "https://api.duckduckgo.com/"
 MAX_TEXT_FILE_BYTES = int(os.getenv("API_TEXT_LIMIT_BYTES", "524288"))  # 512 KiB default
+API_ACCESS_KEY = os.getenv("API_ACCESS_KEY")
 
 START_TIME = time.time()
 
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 DATA_DIR.mkdir(parents=True, exist_ok=True)
+
 
 app = FastAPI(
   title="Debt Coders Doja API",
@@ -52,6 +54,15 @@ app.add_middleware(
   allow_methods=["*"],
   allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def enforce_api_key(request: Request, call_next):
+  if API_ACCESS_KEY:
+    header_value = request.headers.get("x-doja-key")
+    if header_value != API_ACCESS_KEY:
+      return JSONResponse(status_code=401, content={"detail": "API key required"})
+  return await call_next(request)
 
 
 class HealthResponse(BaseModel):

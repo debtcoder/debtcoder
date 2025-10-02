@@ -59,6 +59,7 @@ web/
 - `GET /fs/read` → read UTF-8 file content at any depth
 - `POST /fs/write` → write text payloads, auto-creating directories
 - `DELETE /fs/delete` → remove files inside uploads root
+- All JSON endpoints require header `X-Doja-Key` matching `API_ACCESS_KEY` from `/etc/api-debtcodersdoja.env` (dashboard handles this automatically).
 
 ## Deployment Checklist (Production)
 1. **App updates**
@@ -83,10 +84,10 @@ web/
 4. **Smoke tests**
    ```bash
    curl -fsS https://api.debtcodersdoja.com/healthz
-   curl -fsS https://api.debtcodersdoja.com/diagnostics
+   curl -fsS -H "X-Doja-Key: $API_ACCESS_KEY" https://api.debtcodersdoja.com/diagnostics
    curl -fsS https://api.debtcodersdoja.com/motd
-   curl -fsS "https://api.debtcodersdoja.com/duckduckgo?q=openai"
-   curl -fsS https://api.debtcodersdoja.com/uploads
+   curl -fsS -H "X-Doja-Key: $API_ACCESS_KEY" "https://api.debtcodersdoja.com/duckduckgo?q=openai"
+   curl -fsS -H "X-Doja-Key: $API_ACCESS_KEY" https://api.debtcodersdoja.com/uploads
    ```
 
 ## Dashboard Deployment
